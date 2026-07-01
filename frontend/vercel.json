@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://aurawealth-w54f.onrender.com/api/$1"
+    },
+    {
+      "source": "/ws",
+      "destination": "wss://aurawealth-w54f.onrender.com/ws"
+    }
+  ]
+}

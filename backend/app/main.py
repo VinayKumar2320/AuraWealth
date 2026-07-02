@@ -9,6 +9,7 @@ from app.config import PORT, HOST
 from app.services.mock_data_service import MockDataService
 from app.services.allocation_service import AllocationService
 from app.services.alpaca_service import AlpacaService
+from app.services.sentiment_service import SentimentService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +30,7 @@ app.add_middleware(
 mock_data_service = MockDataService()
 allocation_service = AllocationService()
 alpaca_service = AlpacaService()
+sentiment_service = SentimentService()
 
 
 # In-memory websocket connection manager
@@ -89,13 +91,26 @@ def read_root():
 @app.get("/api/recommendations")
 def get_recommendations(risk_level: str = "moderate"):
     """
-    Returns the daily researched picks filtered by risk profile.
+    Returns the daily researched picks filtered by risk profile, enriched with CIO AI news synthesis.
     """
     recommendations = mock_data_service.get_daily_recommendations(risk_level)
+    news_items = sentiment_service.fetch_rss_headlines()
+    
+    enriched = []
+    for stock in recommendations:
+        analysis = sentiment_service.analyze_ticker_sentiment(stock["ticker"], news_items)
+        enriched.append({
+            **stock,
+            "sentiment_score": analysis["sentiment_score"],
+            "catalyst": analysis["catalyst"],
+            "macro_impact": analysis["macro_impact"],
+            "allocation_impact": analysis["allocation_impact"]
+        })
+        
     return {
         "risk_level": risk_level,
-        "count": len(recommendations),
-        "stocks": recommendations
+        "count": len(enriched),
+        "stocks": enriched
     }
 
 class AllocateRequest(BaseModel):
@@ -105,15 +120,29 @@ class AllocateRequest(BaseModel):
 @app.post("/api/allocate")
 def allocate_portfolio(req: AllocateRequest):
     """
-    Takes an investment amount and calculates the fractional share distribution.
+    Takes an investment amount and calculates the fractional share distribution, enriched with CIO AI news synthesis.
     """
     stocks = mock_data_service.get_daily_recommendations(req.risk_level)
-    allocation = allocation_service.calculate_allocation(req.amount, stocks)
+    news_items = sentiment_service.fetch_rss_headlines()
+    
+    enriched = []
+    for stock in stocks:
+        analysis = sentiment_service.analyze_ticker_sentiment(stock["ticker"], news_items)
+        enriched.append({
+            **stock,
+            "sentiment_score": analysis["sentiment_score"],
+            "catalyst": analysis["catalyst"],
+            "macro_impact": analysis["macro_impact"],
+            "allocation_impact": analysis["allocation_impact"]
+        })
+        
+    allocation = allocation_service.calculate_allocation(req.amount, enriched)
     return {
         "amount": req.amount,
         "risk_level": req.risk_level,
         **allocation
     }
+
 
 class InvestAllocationItem(BaseModel):
     ticker: str

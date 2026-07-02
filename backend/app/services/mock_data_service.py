@@ -7,6 +7,7 @@ MOCK_METRICS = {
     "AAPL": {
         "name": "Apple Inc.",
         "sector": "Technology",
+        "asset_class": "Equities",
         "price": 218.45,
         "rsi": 58,
         "pe_ratio": 32.4,
@@ -16,6 +17,7 @@ MOCK_METRICS = {
     "MSFT": {
         "name": "Microsoft Corporation.",
         "sector": "Technology",
+        "asset_class": "Equities",
         "price": 447.67,
         "rsi": 49,
         "pe_ratio": 36.1,
@@ -25,6 +27,7 @@ MOCK_METRICS = {
     "NVDA": {
         "name": "NVIDIA Corporation",
         "sector": "Technology",
+        "asset_class": "Equities",
         "price": 124.50,
         "rsi": 71,
         "pe_ratio": 68.2,
@@ -34,6 +37,7 @@ MOCK_METRICS = {
     "TSLA": {
         "name": "Tesla Inc.",
         "sector": "Consumer Cyclical",
+        "asset_class": "Equities",
         "price": 198.80,
         "rsi": 62,
         "pe_ratio": 54.3,
@@ -43,6 +47,7 @@ MOCK_METRICS = {
     "AMZN": {
         "name": "Amazon.com Inc.",
         "sector": "Consumer Cyclical",
+        "asset_class": "Equities",
         "price": 189.30,
         "rsi": 52,
         "pe_ratio": 41.5,
@@ -52,6 +57,7 @@ MOCK_METRICS = {
     "META": {
         "name": "Meta Platforms Inc.",
         "sector": "Technology",
+        "asset_class": "Equities",
         "price": 504.10,
         "rsi": 56,
         "pe_ratio": 28.7,
@@ -61,6 +67,7 @@ MOCK_METRICS = {
     "GOOGL": {
         "name": "Alphabet Inc.",
         "sector": "Technology",
+        "asset_class": "Equities",
         "price": 178.60,
         "rsi": 45,
         "pe_ratio": 24.3,
@@ -70,6 +77,7 @@ MOCK_METRICS = {
     "UNH": {
         "name": "UnitedHealth Group Inc.",
         "sector": "Healthcare",
+        "asset_class": "Equities",
         "price": 512.40,
         "rsi": 38,
         "pe_ratio": 19.8,
@@ -79,6 +87,7 @@ MOCK_METRICS = {
     "JPM": {
         "name": "JPMorgan Chase & Co.",
         "sector": "Financial Services",
+        "asset_class": "Equities",
         "price": 204.15,
         "rsi": 42,
         "pe_ratio": 11.2,
@@ -88,11 +97,42 @@ MOCK_METRICS = {
     "LLY": {
         "name": "Eli Lilly & Co.",
         "sector": "Healthcare",
+        "asset_class": "Equities",
         "price": 894.20,
         "rsi": 66,
         "pe_ratio": 82.5,
         "sentiment": 0.88,
         "why_buy_today": "Eli Lilly secures a new factory expansion in Germany, accelerating GLP-1 weight loss drug shipments to international markets."
+    },
+    "GLD": {
+        "name": "SPDR Gold Shares",
+        "sector": "Precious Metals",
+        "asset_class": "Precious Metals",
+        "price": 234.50,
+        "rsi": 50,
+        "pe_ratio": 0.0,
+        "sentiment": 0.80,
+        "why_buy_today": "Gold prices hit record highs as inflation concerns linger and the Federal Reserve hints at interest rate cuts."
+    },
+    "SLV": {
+        "name": "iShares Silver Trust",
+        "sector": "Precious Metals",
+        "asset_class": "Precious Metals",
+        "price": 28.20,
+        "rsi": 48,
+        "pe_ratio": 0.0,
+        "sentiment": 0.72,
+        "why_buy_today": "Silver sees industrial demand surge in solar panel manufacturing alongside standard monetary hedging."
+    },
+    "USO": {
+        "name": "United States Oil Fund",
+        "sector": "Energy/Commodities",
+        "asset_class": "Commodities",
+        "price": 74.15,
+        "rsi": 55,
+        "pe_ratio": 0.0,
+        "sentiment": 0.68,
+        "why_buy_today": "Crude oil pushes higher amid production cuts in key OPEC nations and rising geopolitical risk in the Middle East."
     }
 }
 
@@ -105,36 +145,40 @@ class MockDataService:
     def get_daily_recommendations(self, risk_level: str = "moderate") -> List[Dict[str, Any]]:
         """
         Filters and ranks stocks based on risk level.
-        Conservative: prefers low P/E, lower RSI, Healthcare/Financials
-        Aggressive: prefers Technology, high sentiment, ignores high RSI
+        Conservative: prefers low risk assets like Precious Metals, stable financials/healthcare
+        Aggressive: prefers Equities, momentum Technology
         Moderate: balances the two
         """
         recommended = []
         for ticker, data in MOCK_METRICS.items():
             current_price = self.prices[ticker]
-            # Base rank is sentiment score (0 to 1) and rsi balance
             sentiment = self.sentiments[ticker]
             rsi = data["rsi"]
             
-            # Simple scoring mechanism
+            # Scoring mechanism supporting asset classes
             if risk_level == "conservative":
-                # Prefers low risk: low P/E, RSI not overbought, weight healthcare/financials higher
+                # Prefers low risk: low P/E, RSI not overbought, weight precious metals & defensive sectors higher
                 sector_bonus = 0.2 if data["sector"] in ["Healthcare", "Financial Services"] else 0.0
-                rsi_penalty = max(0, (rsi - 50) / 100)  # penalize overbought
-                score = sentiment + sector_bonus - rsi_penalty - (data["pe_ratio"] / 200)
+                asset_class_bonus = 0.35 if data["asset_class"] == "Precious Metals" else 0.0
+                rsi_penalty = max(0, (rsi - 50) / 100)
+                pe_penalty = (data["pe_ratio"] / 200) if data["pe_ratio"] > 0 else 0.0
+                score = sentiment + sector_bonus + asset_class_bonus - rsi_penalty - pe_penalty
             elif risk_level == "aggressive":
-                # Prefers high momentum: tech sector, high sentiment, ignores high PE
+                # Prefers high momentum: tech sector, high sentiment, ignores high PE, de-prioritizes commodities/metals
                 sector_bonus = 0.25 if data["sector"] == "Technology" else 0.0
+                asset_class_bonus = -0.15 if data["asset_class"] in ["Precious Metals", "Commodities"] else 0.0
                 rsi_bonus = 0.1 if rsi > 60 else 0.0
-                score = sentiment + sector_bonus + rsi_bonus
+                score = sentiment + sector_bonus + asset_class_bonus + rsi_bonus
             else:  # Moderate
-                # Balanced
-                score = sentiment - abs(rsi - 50) / 150
+                # Balanced asset class and sector scores
+                asset_class_bonus = 0.15 if data["asset_class"] in ["Precious Metals", "Commodities"] else 0.0
+                score = sentiment + asset_class_bonus - abs(rsi - 50) / 150
             
             recommended.append({
                 "ticker": ticker,
                 "name": data["name"],
                 "sector": data["sector"],
+                "asset_class": data["asset_class"],
                 "price": round(current_price, 2),
                 "rsi": rsi,
                 "pe_ratio": data["pe_ratio"],
@@ -143,12 +187,13 @@ class MockDataService:
                 "raw_score": score
             })
             
-        # Sort by raw score descending and pick top 7 stocks
+        # Sort by raw score descending
         recommended = sorted(recommended, key=lambda x: x["raw_score"], reverse=True)
         
         # Take between 5 and 8 stocks depending on risk
         limit = 5 if risk_level == "conservative" else (8 if risk_level == "aggressive" else 6)
         return recommended[:limit]
+
 
     def update_live_prices(self) -> Dict[str, float]:
         """

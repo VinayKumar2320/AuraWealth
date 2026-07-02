@@ -43,14 +43,16 @@ class SentimentService:
 
     def analyze_ticker_sentiment(self, ticker: str, news_items: List[Dict[str, str]]) -> Dict[str, Any]:
         """
-        Uses OpenAI structured output parser to score and summarize a ticker
-        based on current news context. Falls back to mock values if OpenAI is unconfigured.
+        Uses OpenAI structured output parser with a 20-year Wall Street CIO persona
+        to filter macro catalysts and return structured analysis.
         """
         if not self.openai_client:
             logger.warning("OpenAI API Key not set. Falling back to default simulation sentiment.")
             return {
                 "sentiment_score": 0.75,
-                "why_buy_today": f"{ticker} exhibits strong support from recent market movements and high volume."
+                "catalyst": f"Positive momentum trends for {ticker} supported by macro inflows.",
+                "macro_impact": f"Institutional desk notes strong relative strength and positioning in {ticker}'s sector under the current interest rate regime.",
+                "allocation_impact": f"Justifies core holding allocation in today's basket to balance risk-reward across the portfolio."
             }
 
         # Filter news items mentioning the ticker
@@ -61,18 +63,25 @@ class SentimentService:
                 relevant_news.append(item)
 
         if not relevant_news:
-            # If no specific RSS news found, query GPT with general general knowledge of current day stock factors
             context = f"No recent RSS feed matches found for {ticker}."
         else:
             context = "\n".join([f"- {n['title']}: {n['description']}" for n in relevant_news[:3]])
 
         prompt = f"""
-        Analyze the current sentiment and immediate catalysts for the stock ticker: {ticker}.
+        You are a Chief Investment Officer (CIO) with 20+ years of institutional experience on Wall Street.
+        Analyze the current news sentiment and immediate macro catalysts for: {ticker}.
         
         Recent News Context:
         {context}
         
-        Provide a sentiment rating between -1.0 (extremely bearish) and 1.0 (extremely bullish) and a concise, single-sentence 'Why Buy Today' summary summarizing the key positive catalyst.
+        CRITICAL RULES:
+        1. Act strictly as a seasoned CIO. Cut through noise, retail speculation, clickbait, and generic intraday price fluctuations.
+        2. Focus strictly on major macroeconomic catalysts: Federal Reserve decisions, interest rate policy shifts, inflation indices (CPI, PCE), geopolitical risk escalations, and massive corporate earnings surprises that redefine company valuations.
+        3. Provide three outputs:
+           - Catalyst: A concise description of the hard news catalyst.
+           - Macro Impact: Why an institutional investment committee and a 20-year veteran cares about this headline, mapping it to broader economic trends.
+           - Allocation Impact: How this catalyst justifies allocating capital into this specific asset/ETF (e.g. {ticker}) for a diversified daily micro-investment.
+        4. Provide a sentiment_score between -1.0 (extremely bearish) and 1.0 (extremely bullish).
         """
 
         try:
@@ -80,7 +89,7 @@ class SentimentService:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a professional financial research analyst. Give precise ratings and single-sentence explanations."},
+                    {"role": "system", "content": "You are a professional financial Chief Investment Officer. Give precise ratings and structured explanations."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={
@@ -92,26 +101,35 @@ class SentimentService:
                             "type": "OBJECT",
                             "properties": {
                                 "sentiment_score": {"type": "NUMBER"},
-                                "why_buy_today": {"type": "STRING"}
+                                "catalyst": {"type": "STRING"},
+                                "macro_impact": {"type": "STRING"},
+                                "allocation_impact": {"type": "STRING"}
                             },
-                            "required": ["sentiment_score", "why_buy_today"],
+                            "required": ["sentiment_score", "catalyst", "macro_impact", "allocation_impact"],
                             "additionalProperties": False
                         }
                     }
                 },
                 temperature=0.2,
-                max_tokens=150
+                max_tokens=250
             )
 
             import json
             result = json.loads(response.choices[0].message.content)
             return {
                 "sentiment_score": float(result.get("sentiment_score", 0.0)),
-                "why_buy_today": str(result.get("why_buy_today", ""))
+                "catalyst": str(result.get("catalyst", "")),
+                "macro_impact": str(result.get("macro_impact", "")),
+                "allocation_impact": str(result.get("allocation_impact", ""))
             }
         except Exception as e:
             logger.error(f"Error during OpenAI sentiment analysis for {ticker}: {e}")
             return {
                 "sentiment_score": 0.5,
-                "why_buy_today": f"Analyst ratings remain favorable for {ticker} based on technical support levels."
+                "catalyst": f"Market structure and technical signals remain stable for {ticker}.",
+                "macro_impact": f"Macro headwinds are priced in, with standard support levels holding at current levels.",
+                "allocation_impact": f"Provides passive market exposure to stabilize the overall portfolio variance."
             }
+
+
+

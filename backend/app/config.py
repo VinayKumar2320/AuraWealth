@@ -18,5 +18,7 @@ ALPACA_BASE_URL = os.getenv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets
 # Default Stock pool for the micro-investing system
 STOCK_POOL = [
     "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", 
-    "META", "GOOGL", "UNH", "JPM", "LLY"
+    "META", "GOOGL", "UNH", "JPM", "LLY",
+    "GLD", "SLV", "USO"
 ]
+

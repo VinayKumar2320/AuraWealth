@@ -2,13 +2,19 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 
+
+
 interface AllocationItem {
   ticker: string;
   name: string;
   sector: string;
+  asset_class: string;
   price: number;
   sentiment_score: number;
   why_buy_today: string;
+  catalyst?: string;
+  macro_impact?: string;
+  allocation_impact?: string;
   allocation_pct: number;
   dollar_split: number;
   shares: number;
@@ -18,6 +24,7 @@ interface PortfolioData {
   total_allocated: number;
   allocations: AllocationItem[];
   sector_diversification: Record<string, number>;
+  asset_class_diversification: Record<string, number>;
 }
 
 interface MarketTickerData {
@@ -32,10 +39,21 @@ const SECTOR_COLORS: Record<string, string> = {
   "Consumer Cyclical": "hsl(280, 80%, 65%)", // Magenta
   "Healthcare": "hsl(145, 80%, 45%)",        // Emerald Green
   "Financial Services": "hsl(190, 90%, 55%)", // Cyan Accent
+  "Precious Metals": "hsl(45, 90%, 55%)",     // Gold/Amber
+  "Energy/Commodities": "hsl(25, 80%, 50%)",  // Bronze/Orange
 };
+
+// Color map for asset classes
+const ASSET_CLASS_COLORS: Record<string, string> = {
+  "Equities": "hsl(250, 85%, 65%)",          // Indigo
+  "Precious Metals": "hsl(45, 90%, 55%)",     // Gold/Amber
+  "Commodities": "hsl(25, 80%, 50%)",         // Bronze/Orange
+};
+
 const DEFAULT_COLOR = "hsl(35, 90%, 55%)"; // Orange Amber
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
 
 
@@ -283,6 +301,40 @@ export default function Dashboard() {
     });
   }, [portfolio]);
 
+  // Generate dynamic SVG Donut elements for asset class breakdown
+  const assetClassSlices = useMemo(() => {
+    if (!portfolio) return [];
+    
+    const div = portfolio.asset_class_diversification || {};
+    const entries = Object.entries(div).filter(([_, val]) => val > 0);
+    
+    let currentAngle = -90; // start at top (12 o'clock)
+    const radius = 55;
+    const cx = 80;
+    const cy = 80;
+    const circ = 2 * Math.PI * radius;
+
+    return entries.map(([assetClass, pct]) => {
+      const angle = (pct / 100) * 360;
+      const strokeDashoffset = circ - (circ * pct) / 100;
+      const rotation = currentAngle;
+      
+      currentAngle += angle;
+      
+      return {
+        assetClass,
+        pct,
+        color: ASSET_CLASS_COLORS[assetClass] || DEFAULT_COLOR,
+        rotation,
+        strokeDasharray: circ,
+        strokeDashoffset,
+        radius,
+        cx,
+        cy
+      };
+    });
+  }, [portfolio]);
+
   return (
     <div className="container">
       {/* Header Banner */}
@@ -417,54 +469,103 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Sector Diversification Overview inside Left panel */}
+          {/* Sector & Asset Class Diversification Overview inside Left panel */}
           {portfolio && (
-            <div style={{ marginTop: "2rem", borderTop: "1px solid var(--border-card)", paddingTop: "1.5rem" }}>
-              <h3 className="card-title" style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>
-                Sector Breakup
-              </h3>
-              
-              <div className="donut-chart-container">
-                <svg width="160" height="160" viewBox="0 0 160 160">
-                  <circle cx="80" cy="80" r="55" fill="transparent" stroke="var(--bg-secondary)" strokeWidth="12" />
-                  {donutSlices.map((slice, i) => (
-                    <circle
-                      key={i}
-                      cx={slice.cx}
-                      cy={slice.cy}
-                      r={slice.radius}
-                      fill="transparent"
-                      stroke={slice.color}
-                      strokeWidth="12"
-                      strokeDasharray={slice.strokeDasharray}
-                      strokeDashoffset={slice.strokeDashoffset}
-                      transform={`rotate(${slice.rotation} 80 80)`}
-                      strokeLinecap="round"
-                    />
+            <div style={{ marginTop: "2rem", borderTop: "1px solid var(--border-card)", paddingTop: "1.5rem", display: "flex", flexDirection: "column", gap: "2rem" }}>
+              <div>
+                <h3 className="card-title" style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>
+                  Sector Breakup
+                </h3>
+                
+                <div className="donut-chart-container">
+                  <svg width="160" height="160" viewBox="0 0 160 160">
+                    <circle cx="80" cy="80" r="55" fill="transparent" stroke="var(--bg-secondary)" strokeWidth="12" />
+                    {donutSlices.map((slice, i) => (
+                      <circle
+                        key={i}
+                        cx={slice.cx}
+                        cy={slice.cy}
+                        r={slice.radius}
+                        fill="transparent"
+                        stroke={slice.color}
+                        strokeWidth="12"
+                        strokeDasharray={slice.strokeDasharray}
+                        strokeDashoffset={slice.strokeDashoffset}
+                        transform={`rotate(${slice.rotation} 80 80)`}
+                        strokeLinecap="round"
+                      />
+                    ))}
+                    <text x="80" y="85" textAnchor="middle" fill="var(--text-primary)" fontSize="15" fontWeight="700" fontFamily="var(--font-display)">
+                      {portfolio.allocations.length} Assets
+                    </text>
+                  </svg>
+                </div>
+
+                <div className="sector-list">
+                  {Object.entries(portfolio.sector_diversification || {}).map(([sector, pct]) => (
+                    <div key={sector} className="sector-card">
+                      <div style={{ 
+                        width: "10px", 
+                        height: "10px", 
+                        backgroundColor: SECTOR_COLORS[sector] || DEFAULT_COLOR, 
+                        borderRadius: "50%",
+                        margin: "0 auto 0.4rem"
+                      }}></div>
+                      <div className="sector-title">{sector}</div>
+                      <div className="sector-value">{pct}%</div>
+                    </div>
                   ))}
-                  <text x="80" y="85" textAnchor="middle" fill="var(--text-primary)" fontSize="15" fontWeight="700" fontFamily="var(--font-display)">
-                    {portfolio.allocations.length} Assets
-                  </text>
-                </svg>
+                </div>
               </div>
 
-              <div className="sector-list">
-                {Object.entries(portfolio.sector_diversification || {}).map(([sector, pct]) => (
-                  <div key={sector} className="sector-card">
-                    <div style={{ 
-                      width: "10px", 
-                      height: "10px", 
-                      backgroundColor: SECTOR_COLORS[sector] || DEFAULT_COLOR, 
-                      borderRadius: "50%",
-                      margin: "0 auto 0.4rem"
-                    }}></div>
-                    <div className="sector-title">{sector}</div>
-                    <div className="sector-value">{pct}%</div>
-                  </div>
-                ))}
+              <div style={{ borderTop: "1px dashed var(--border-card)", paddingTop: "1.5rem" }}>
+                <h3 className="card-title" style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>
+                  Asset Class Breakup
+                </h3>
+                
+                <div className="donut-chart-container">
+                  <svg width="160" height="160" viewBox="0 0 160 160">
+                    <circle cx="80" cy="80" r="55" fill="transparent" stroke="var(--bg-secondary)" strokeWidth="12" />
+                    {assetClassSlices.map((slice, i) => (
+                      <circle
+                        key={i}
+                        cx={slice.cx}
+                        cy={slice.cy}
+                        r={slice.radius}
+                        fill="transparent"
+                        stroke={slice.color}
+                        strokeWidth="12"
+                        strokeDasharray={slice.strokeDasharray}
+                        strokeDashoffset={slice.strokeDashoffset}
+                        transform={`rotate(${slice.rotation} 80 80)`}
+                        strokeLinecap="round"
+                      />
+                    ))}
+                    <text x="80" y="85" textAnchor="middle" fill="var(--text-primary)" fontSize="15" fontWeight="700" fontFamily="var(--font-display)">
+                      {Object.keys(portfolio.asset_class_diversification || {}).length} Classes
+                    </text>
+                  </svg>
+                </div>
+
+                <div className="sector-list">
+                  {Object.entries(portfolio.asset_class_diversification || {}).map(([ac, pct]) => (
+                    <div key={ac} className="sector-card">
+                      <div style={{ 
+                        width: "10px", 
+                        height: "10px", 
+                        backgroundColor: ASSET_CLASS_COLORS[ac] || DEFAULT_COLOR, 
+                        borderRadius: "50%",
+                        margin: "0 auto 0.4rem"
+                      }}></div>
+                      <div className="sector-title">{ac}</div>
+                      <div className="sector-value">{pct}%</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
+
         </section>
 
         {/* Right Panel: Recommendations & Fractions Calculations */}
@@ -510,9 +611,27 @@ export default function Dashboard() {
                       <React.Fragment key={stock.ticker}>
                         <tr>
                           <td>
-                            <span className="ticker-badge">{stock.ticker}</span>
-                            <span className="stock-name">{stock.name}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                              <span className="ticker-badge">{stock.ticker}</span>
+                              <span 
+                                className="asset-class-badge" 
+                                style={{
+                                  fontSize: "0.7rem",
+                                  padding: "0.15rem 0.4rem",
+                                  borderRadius: "4px",
+                                  fontWeight: "600",
+                                  textTransform: "uppercase",
+                                  backgroundColor: stock.asset_class === "Precious Metals" ? "rgba(245, 158, 11, 0.15)" : stock.asset_class === "Commodities" ? "rgba(249, 115, 22, 0.15)" : "rgba(99, 102, 241, 0.15)",
+                                  color: stock.asset_class === "Precious Metals" ? "hsl(45, 90%, 55%)" : stock.asset_class === "Commodities" ? "hsl(25, 80%, 50%)" : "hsl(250, 85%, 65%)",
+                                  border: `1px solid ${stock.asset_class === "Precious Metals" ? "rgba(245, 158, 11, 0.3)" : stock.asset_class === "Commodities" ? "rgba(249, 115, 22, 0.3)" : "rgba(99, 102, 241, 0.3)"}`
+                                }}
+                              >
+                                {stock.asset_class}
+                              </span>
+                            </div>
+                            <span className="stock-name" style={{ marginTop: "0.25rem", display: "block" }}>{stock.name}</span>
                           </td>
+
                           <td style={{ textAlign: "right" }} className={`price-text ${priceFlashClass}`}>
                             ${stock.price.toFixed(2)}
                             {changePct !== 0 && (
@@ -549,16 +668,30 @@ export default function Dashboard() {
                         {expandedTicker === stock.ticker && (
                           <tr>
                             <td colSpan={6} style={{ padding: "0 1rem 1rem", borderBottom: "1px solid var(--border-card)" }}>
-                              <div className="ai-why-card">
-                                <div className="ai-why-title">
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <div className="ai-why-card" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                                <div className="ai-why-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem", borderBottom: "1px solid var(--border-card)", paddingBottom: "0.5rem" }}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2.5">
                                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                                     <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                                     <line x1="12" y1="22.08" x2="12" y2="12" />
                                   </svg>
-                                  AI Catalyst Summary (Real-Time Ingestion)
+                                  <span style={{ fontWeight: "700", letterSpacing: "0.03em" }}>20-YEAR VETERAN ANALYST SYNTHESIS (CIO DESK)</span>
                                 </div>
-                                {stock.why_buy_today}
+                                
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.25rem", fontSize: "0.9rem" }}>
+                                  <div>
+                                    <div style={{ color: "var(--color-primary)", fontWeight: "600", marginBottom: "0.35rem", fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>The Catalyst</div>
+                                    <div style={{ color: "var(--text-primary)", lineHeight: "1.4" }}>{stock.catalyst || stock.why_buy_today}</div>
+                                  </div>
+                                  <div>
+                                    <div style={{ color: "var(--color-accent)", fontWeight: "600", marginBottom: "0.35rem", fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>The Macro Impact</div>
+                                    <div style={{ color: "var(--text-secondary)", lineHeight: "1.4" }}>{stock.macro_impact || "Analyst desk notes core sector macro trends supporting structural tailwinds."}</div>
+                                  </div>
+                                  <div>
+                                    <div style={{ color: "var(--color-success)", fontWeight: "600", marginBottom: "0.35rem", fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Allocation Impact</div>
+                                    <div style={{ color: "var(--text-secondary)", lineHeight: "1.4" }}>{stock.allocation_impact || "Justifies target allocation share for capital preservation and momentum capture."}</div>
+                                  </div>
+                                </div>
                               </div>
                             </td>
                           </tr>
